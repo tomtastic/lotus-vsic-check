@@ -6,90 +6,92 @@ use POSIX qw(strftime);
 use LWP::UserAgent;
 
 my $vsic_base = 'http://vsic.lotuscars.com/downloads/software?';
-my $date      = strftime "%Y/%m/%d", localtime;
-my $offset    = tell DATA; # save the position
+# http://en.wikipedia.org/wiki/ISO_8601 ftw.
+# Allows us to compare dates lexicographically (ie, using lt, gt).
+my $today     = strftime "%Y-%m-%d", localtime;
 
-my %cars = (
+my %models = (
     "EVORA S (ROW) '12-'15" => {
         'URL' => 'field_models_tr_tid=74&field_model_years_tr_tid=99&field_gearbox_tr_tid=100&field_engine_type_tr_tid=7&field_chassis_spec_tr_tid=65',
         'DESC' => undef,
-        'CRP' => undef,
-        'LASTDATE' => undef,
+        'DATECRP' => undef,
     },
     "EVORA NA (ROW) '12-'15" => {
         'URL' => 'field_models_tr_tid=74&field_model_years_tr_tid=96&field_gearbox_tr_tid=100&field_engine_type_tr_tid=6&field_chassis_spec_tr_tid=65',
         'DESC' => undef,
-        'CRP' => undef,
-        'LASTDATE' => undef,
+        'DATECRP' => undef,
     },
     "EXIGE S (ROW) '12-'16" => {
         'URL' => 'field_models_tr_tid=75&field_model_years_tr_tid=96&field_gearbox_tr_tid=100&field_engine_type_tr_tid=7&field_chassis_spec_tr_tid=65',
         'DESC' => undef,
-        'CRP' => undef,
-        'LASTDATE' => undef,
+        'DATECRP' => undef,
     }
 );
 
-sub read_old_values {
-    seek DATA, $offset, 0; # position filehandle just past __DATA__
-    while (my $line = <DATA>) {
-        chomp $line;
-        my ($date,$car,$crp) = split(/,/,$line);
-        $cars{$car}{'CRP'}=$crp;
-        $cars{$car}{'LASTDATE'}=$date;
+# Read the CRP versions we've saved in the __DATA__ segment into %models
+my $offset = tell DATA; # save the position
+seek DATA, $offset, 0;  # position filehandle just past __DATA__
+while (my $line = <DATA>) {
+    chomp $line;
+    my ($date,$model,$crp) = split(/,/,$line);
+    # Build an array of CRP {date,version} tuples
+    push @{$models{$model}{'DATECRP'}}, [$date,$crp];
+}
+
+foreach my $model (sort keys %models) {
+    print "$model - has seen these CRP versions : \n";
+    # Hotness, use arrow notation to get first element of array reference.
+    foreach my $tuples (sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}}) {
+        printf("\t- %-10s : %s\n",@$tuples[0],@$tuples[1]);
     }
 }
 
-sub show {
-    foreach (sort keys %cars) {
-        # Do we care about the description?
-        #print "$date,$_,$cars{$_}{'CRP'},$cars{$_}{'DESC'}\n";
-        print "$cars{$_}{'LASTDATE'},$_,$cars{$_}{'CRP'}\n";
-    }
-}
+#foreach (keys %models) {
+#    # last if ($date > $models{$_}{'LASTDATE'})
+#    &show;
+#}
+# else try to parse VSIC for updated values
+#&vsic_check;
+# possibly (with a -w argument)? append the new VSIC values to the DATA segment
+#&append_new_values;
 
 sub append_new_values {
     seek DATA, 0, 2; # go to the end of the source file
     my $offset = tell(DATA); # remember where that is
     open my $self, '>>', $0 or die $!; # of course, you could use DATA instead of $self here
     seek $self, $offset, 0; # go to the previously recorded position
-    foreach (sort keys %cars) {
-        print {$self} "$date,$_,$cars{$_}{'CRP'},newdata!!\n";
+    foreach (sort keys %models) {
+        print {$self} "$today,$_,$models{$_}{'CRP'},newdata!!\n";
     }
 }
 
 sub vsic_check {
     my $lwp = LWP::UserAgent->new;
-    foreach (sort keys %cars) {
-        my $response = $lwp->get($vsic_base.$cars{$_}{'URL'});
+    foreach (sort keys %models) {
+        my $response = $lwp->get($vsic_base.$models{$_}{'URL'});
         if ($response->is_success) {
             my $response_body = $response->decoded_content;
             # '12-'15 Evora S & S-IPS Supercharged Models Engine Management Program .CRP File R132E0096
             $response_body =~ m/(\&#039;.*([[:upper:]][[:digit:]]{3}[[:upper:]][[:digit:]]{4}))/;
-            $cars{$_}{'DESC'} = $1;
-            $cars{$_}{'CRP'} = $2;
+            $models{$_}{'DESC'} = $1;
+            $models{$_}{'CRP'} = $2;
         } else {
-            die "Error getting the VSIC page : $vsic_base.$cars{$_}{'URL'}\n";
+            die "Error getting the VSIC page : $vsic_base.$models{$_}{'URL'}\n";
         }
-        die "Couldn't find the CRP field : $vsic_base.$cars{$_}{'URL'}\n" unless defined($cars{$_}{'CRP'});
+        die "Couldn't find the CRP field : $vsic_base.$models{$_}{'URL'}\n" unless defined($models{$_}{'CRP'});
         # Tidy up the HTML quoted characters...
-        $cars{$_}{'DESC'} =~ s/\&amp;/&/g;
-        $cars{$_}{'DESC'} =~ s/\&#039;/\'/g;
-        $cars{$_}{'DESC'} =~ s/\ +Engine.*$//g;
-        $cars{$_}{'DESC'} =~ s/^/"/g;
-        $cars{$_}{'DESC'} =~ s/$/"/g;
+        $models{$_}{'DESC'} =~ s/\&amp;/&/g;
+        $models{$_}{'DESC'} =~ s/\&#039;/\'/g;
+        $models{$_}{'DESC'} =~ s/\ +Engine.*$//g;
+        $models{$_}{'DESC'} =~ s/^/"/g;
+        $models{$_}{'DESC'} =~ s/$/"/g;
     }
 }
 
-&read_old_values;
-# if old values are from today then
-&show;
-# else try to parse VSIC for updated values
-#&vsic_check;
-# possibly (with a -w argument)? append the new VSIC values to the DATA segment
-#&append_new_values;
-
 __DATA__
-2017/04/18,EVORA NA (ROW) '12-'15,P132E0092
-2017/04/18,EVORA S (ROW) '12-'15,R132E0096
-2017/04/18,EXIGE S (ROW) '12-'16,N138E0009
+2017-03-01,EVORA NA (ROW) '12-'15,EVNA1
+2017-03-01,EVORA S (ROW) '12-'15,EVS1
+2017-03-01,EXIGE S (ROW) '12-'16,EX1
+2017-04-18,EVORA NA (ROW) '12-'15,EVNA2
+2017-04-18,EVORA S (ROW) '12-'15,EVS2
+2017-04-18,EXIGE S (ROW) '12-'16,EX2
