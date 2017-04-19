@@ -5,7 +5,6 @@ use warnings;
 use POSIX qw(strftime);
 use Time::HiRes qw(sleep); # For floaty seconds
 use LWP::UserAgent;
-use Data::Dumper;
 
 my $vsic_base = 'http://vsic.lotuscars.com/downloads/software';
 # http://en.wikipedia.org/wiki/ISO_8601 ftw.
@@ -13,12 +12,13 @@ my $vsic_base = 'http://vsic.lotuscars.com/downloads/software';
 my $today     = strftime "%Y-%m-%d", localtime;
 my $sleep     = 0.3;
 my $debug     = 0;
-local $|      = 1; # Flush to STDOUT as it happens, don't buffer
 my %c = (
     green => '32',
     yellow => '33',
     red => '31',
 );
+my $new_flag  = 0;
+local $|      = 1; # Flush to STDOUT as it happens, don't buffer
 
 # See bottom of script for field definitions
 my %models = (
@@ -113,7 +113,7 @@ foreach my $model (sort keys %models) {
         my $date = @$datecrp[0];
         my $crp  = @$datecrp[1];
         if ($array_pos == $#{$models{$model}{'DATECRP'}}) {
-            # We're the last {date,crp} to print, check VSIC for an update
+            # We're the last {date,crp} to print, check VSIC if we're up to date
             # unless $date is today, then dont bother VSIC, print what we have
             if ($today gt $date) {
                 sleep($sleep);
@@ -123,17 +123,18 @@ foreach my $model (sort keys %models) {
                 } else {
                     printf("\t%-10s, %-20s\n",$date,$crp);
                     printf("\t%-10s, %-20s <--( \e[%dmNew CRP version!\e[m )\n",$today,$crp_new,$c{yellow});
+                    $new_flag=1;
                 }
             } else {
                 printf("\t%-10s, %-20s <--( Current )\n",$date,$crp);
             }
         } else {
-            # Otherwise, just print
             printf("\t%-10s, %-20s\n",$date,$crp);
         }
         $array_pos++;
     }
 }
+print "\e[$c{red}m [!] New CRP versions found, consider updating with '$0 --update'\e[m\n" if ($new_flag);
 
 # field_models_tr_tid :
 #    "70" 2-Eleven
