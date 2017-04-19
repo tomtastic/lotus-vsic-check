@@ -1,7 +1,8 @@
 # lotus-vsic-check
 Experimantal script to scrape http://vsic.lotuscars.com pages for ECU calibration file updates for 2GR-FE engined cars.
 
- trcm@nibbler  ~/src/lotus   master  ./lotus_vsic_check
+```
+$ ./lotus_vsic_check
  [+] Loading CRP version data...
  [+] Sorting...
  [+] Checking Lotus VSIC for updates...
@@ -17,3 +18,4 @@ EXIGE S (ROW) '12-'16 :
 	2017-04-18, TESTTESTTEST
 	2017-04-19, N138E0009            <--( New CRP version! )
  [!] New CRP versions found, consider updating with './lotus_vsic_check --update'
+```
