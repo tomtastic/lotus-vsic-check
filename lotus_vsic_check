@@ -37,12 +37,13 @@ while (my $line = <DATA>) {
     # Build an array of CRP {date,version} tuples
     push @{$models{$model}{'DATECRP'}}, [$date,$crp];
 }
+# Sort DATECRP array. Using arrow notation for first element of array reference.
+@{$models{$model}{'DATECRP'} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'};
 
 foreach my $model (sort keys %models) {
-    print "$model - has seen these CRP versions : \n";
-    # Hotness, use arrow notation to get first element of array reference.
-    foreach my $tuples (sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}}) {
-        printf("\t- %-10s : %s\n",@$tuples[0],@$tuples[1]);
+    print "$model : \n";
+    foreach my $tuples (@{$models{$model}{'DATECRP'}}) {
+        printf("\t- %-10s : %s\n",@$tuples[0],@$tuples[1]); # date : crp
     }
 }
 
