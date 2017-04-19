@@ -14,6 +14,11 @@ my $today     = strftime "%Y-%m-%d", localtime;
 my $sleep     = 0.3;
 my $debug     = 0;
 local $|      = 1; # Flush to STDOUT as it happens, don't buffer
+my %c = (
+    green => '32',
+    yellow => '33',
+    red => '31',
+);
 
 # See bottom of script for field definitions
 my %models = (
@@ -50,7 +55,6 @@ my %models = (
 sub vsic_check {
     my %hash = %{$_[0]};
     my $model = $_[1];
-    # Return the 'hash' hash reference or error.
     my $lwp = LWP::UserAgent->new;
     my $response = $lwp->get($vsic_base.$hash{$model}{'URL'});
     if ($response->is_success) {
@@ -64,7 +68,7 @@ sub vsic_check {
         die "Error getting the VSIC page : $vsic_base.$hash{$model}{'URL'}\n";
     }
     die "Couldn't find the CRP field : $vsic_base.$hash{$model}{'URL'}\n" unless defined($hash{$model}{'CRP'});
-    # Tidy up the HTML quoted characters...
+    # Tidy up the HTML quoted characters, though do we even care about the description?
     $hash{$model}{'DESC'} =~ s/\&amp;/&/g;
     $hash{$model}{'DESC'} =~ s/\&#039;/\'/g;
     $hash{$model}{'DESC'} =~ s/\ +Engine.*$//g;
@@ -73,6 +77,7 @@ sub vsic_check {
     return $hash{$model}{'CRP'};
 }
 
+# TODO
 # Possibly (with a -w argument)? append new VSIC values to the DATA segment
 sub append_new_values {
     seek DATA, 0, 2; # go to the end of the source file
@@ -85,7 +90,7 @@ sub append_new_values {
 }
 
 # Read the CRP versions we've saved in the __DATA__ segment into %models
-print " [+] Reading historical CRP data\n"; sleep($sleep);
+print "\e[$c{red}m [+] Loading CRP version data...\e[m\n"; sleep($sleep);
 my $offset = tell DATA; # save the position
 seek DATA, $offset, 0;  # position filehandle just past __DATA__
 while (my $line = <DATA>) {
@@ -95,14 +100,14 @@ while (my $line = <DATA>) {
     push @{$models{$model}{'DATECRP'}}, [$date,$crp];
 }
 # Sort DATECRP array. Using arrow notation for first element of array reference.
-print " [+] Sorting chronologically\n"; sleep($sleep);
+print "\e[$c{red}m [+] Sorting...\e[m\n"; sleep($sleep);
 foreach my $model (sort keys %models) {
     @{$models{$model}{'DATECRP'}} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}};
 }
 
-print " [+] Checking for new CRP versions\n"; sleep($sleep);
+print "\e[$c{red}m [+] Checking Lotus VSIC for updates...\e[m\n"; sleep($sleep);
 foreach my $model (sort keys %models) {
-    print "$model :\n";
+    print "\e[$c{green}m$model :\e[m\n";
     my $array_pos=0;
     foreach my $datecrp (@{$models{$model}{'DATECRP'}}) {
         my $date = @$datecrp[0];
@@ -111,15 +116,16 @@ foreach my $model (sort keys %models) {
             # We're the last {date,crp} to print, check VSIC for an update
             # unless $date is today, then dont bother VSIC, print what we have
             if ($today gt $date) {
+                sleep($sleep);
                 my $crp_new = vsic_check(\%models,$model);
                 if ($crp eq $crp_new) {
-                    printf("\t%-10s, %-20s <--( unchanged )\n",$date,$crp);
+                    printf("\t%-10s, %-20s <--( Unchanged )\n",$date,$crp);
                 } else {
                     printf("\t%-10s, %-20s\n",$date,$crp);
-                    printf("\t%-10s, %-20s <--( new )\n",$today,$crp_new);
+                    printf("\t%-10s, %-20s <--( \e[%dmNew CRP version!\e[m )\n",$today,$crp_new,$c{yellow});
                 }
             } else {
-                printf("\t%-10s, %-20s <--( unchanged )\n",$date,$crp);
+                printf("\t%-10s, %-20s <--( Current )\n",$date,$crp);
             }
         } else {
             # Otherwise, just print
@@ -214,9 +220,10 @@ foreach my $model (sort keys %models) {
 #    "118" RHD SVA AC
 
 __DATA__
-2017-03-01,EVORA S (ROW) '12-'15,EVS_exampleCRP1
-2017-04-18,EXIGE S (ROW) '12-'16,EX_exampleCRP2
-2017-04-18,EVORA NA (ROW) '12-'15,EVNA_exampleCRP2
-2017-03-01,EVORA NA (ROW) '12-'15,EVNA_exampleCRP1
+2017-03-01,EVORA S (ROW) '12-'15,TESTTESTTEST
+2017-04-18,EXIGE S (ROW) '12-'16,TESTTESTTEST
+2017-04-18,EVORA NA (ROW) '12-'15,TESTTESTTEST
+2017-03-01,EVORA NA (ROW) '12-'15,TESTTESTTEST
 2017-04-18,EVORA S (ROW) '12-'15,R132E0096
-2017-03-01,EXIGE S (ROW) '12-'16,EX_exampleCRP1
+2017-03-01,EXIGE S (ROW) '12-'16,TESTTESTTEST
+2017-04-19,EVORA NA (ROW) '12-'15,P132E0092
