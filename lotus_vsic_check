@@ -38,7 +38,9 @@ while (my $line = <DATA>) {
     push @{$models{$model}{'DATECRP'}}, [$date,$crp];
 }
 # Sort DATECRP array. Using arrow notation for first element of array reference.
-@{$models{$model}{'DATECRP'} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'};
+foreach my $model (sort keys %models) {
+    @{$models{$model}{'DATECRP'}} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}};
+}
 
 foreach my $model (sort keys %models) {
     print "$model : \n";
