@@ -27,39 +27,46 @@ GetOptions  ('u|update' => \$update,
 
 # See bottom of script for field definitions
 my %models = (
-    "EVORA S (ROW) '12-'15" => {
+    "EVORA S Manual (ROW) '12-'15" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
                  '&field_model_years_tr_tid=99'.   # 2015
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
     },
-    "EVORA S (ROW) '11" => {
+    "EVORA S Manual (ROW) '11" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
                  '&field_model_years_tr_tid=95'.   # 2011 (LE year)
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
     },
-    "EVORA NA (ROW) '11" => {
+    "EVORA NA Manual (ROW) '11" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
                  '&field_model_years_tr_tid=95'.   # 2012
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=6'.    # 2GR-FE
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
     },
-    "EVORA NA (ROW) '12-'15" => {
+    "EVORA NA Manual (ROW) '12-'15" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
                  '&field_model_years_tr_tid=96'.   # 2012
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=6'.    # 2GR-FE
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
     },
-    "EXIGE S (ROW) '12-'16" => {
+    "EXIGE S Manual (ROW) '12-'16" => {
         'URL' => '?field_models_tr_tid=75'.        # Exige
                  '&field_model_years_tr_tid=96'.   # 2012
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
+                 '&field_chassis_spec_tr_tid=65',  # RHD Other
+    },
+    "EVORA 400 Manual (ROW) '16" => {
+        'URL' => '?field_models_tr_tid=74'.        # Evora
+                 '&field_model_years_tr_tid=108'.  # 2016
+                 '&field_gearbox_tr_tid=100'.      # Manual
+                 '&field_engine_type_tr_tid=120'.  # 2GR-FE sc/ic
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
     }
 );
@@ -84,18 +91,19 @@ sub vsic_check {
     my $response = $lwp->get($vsic_base.$hash{$model}{'URL'});
     if ($response->is_success) {
         my $response_body = $response->decoded_content;
-        # "&#039;12-&#039;15 Evora S & S-IPS Supercharged hash Engine Management Program .CRP File R132E0096"
-        $response_body =~ m/(\&#039;.*([[:upper:]][[:digit:]]{3}[[:upper:]][[:digit:]]{4}))/;
-        $hash{$model}{'DESC'} = $1;
-        $hash{$model}{'CRP'} = $2;
+        # Match table data with words looking like Lotus car names E{lan|xige|lise|vora|sprit}
+        ($hash{$model}{'DESC'}) = $response_body =~ m/(\&#039;.*?E[[:lower:]]{3,6}.*?)<\/td>/;
+        # Match only things which look like CRP versions occuring after ECU type 'T6' !
+        ($hash{$model}{'CRP'}) = $response_body =~ m/T6.*?([[:upper:]][[:digit:]]{3}[[:upper:]][[:digit:]]{4}).*?<\/td>/s;
     } else {
-        die "Error getting the VSIC page : $vsic_base.$hash{$model}{'URL'}\n";
+        die "Error getting the VSIC page : $vsic_base$hash{$model}{'URL'}\n";
     }
-    die "Couldn't find the CRP field : $vsic_base.$hash{$model}{'URL'}\n" unless defined($hash{$model}{'CRP'});
+    die "Couldn't find the CRP field : $vsic_base$hash{$model}{'URL'}\n" unless defined($hash{$model}{'CRP'});
     # Tidy up the HTML quoted characters, though do we even care about the description?
     $hash{$model}{'DESC'} =~ s/\&amp;/&/g;
     $hash{$model}{'DESC'} =~ s/\&#039;/\'/g;
-    $hash{$model}{'DESC'} =~ s/\ +Engine.*$//g;
+    $hash{$model}{'DESC'} =~ s/\s+[eE]ngine.*$//g;
+    $hash{$model}{'DESC'} =~ s/\s+[pP]owertrain.*$//g;
     print "DEBUG: $hash{$model}{'CRP'}\nDEBUG: $hash{$model}{'DESC'}\n" if ($debug);
     return ($hash{$model}{'CRP'},$hash{$model}{'DESC'});
 }
@@ -112,6 +120,7 @@ sub add_to_history {
 print "\e[$c{red}m [+] Loading CRP version data...\e[m\n";
 while (my $line = <DATA>) {
     chomp $line;
+    next if $line =~ m/^#/;
     my ($date,$model,$crp) = split(/,/,$line);
     push @{$models{$model}{'DATECRP'}}, [$date,$crp];
 }
@@ -251,8 +260,21 @@ if ($update and not $new_flag) {
 #    "118" RHD SVA AC
 
 __DATA__
-2017-04-18,EVORA S (ROW) '12-'15,R132E0096
-2017-04-18,EVORA NA (ROW) '12-'15,P132E0092
-2017-04-18,EXIGE S (ROW) '12-'16,N138E0009
-2017-04-19,EVORA S (ROW) '11,G132E0075
-2017-04-19,EVORA NA (ROW) '11,A132E0090
+#2016-00-00,EVORA 400 Manual (ROW) '16,unknown
+#2017-04-19,EVORA 400 Manual (ROW) '16,G132E0228
+#2017-04-19,EVORA NA Manual (ROW) '11,A132E0090
+#2011-00-00,EVORA NA Manual (ROW) '11,unknown
+#2017-04-19,EVORA NA Manual (ROW) '12-'15,P132E0092
+#2012-00-00,EVORA NA Manual (ROW) '12-'15,unknown
+#2017-04-19,EVORA S Manual (ROW) '11,G132E0075
+#2011-00-00,EVORA S Manual (ROW) '11,unknown
+#2012-00-00,EVORA S Manual (ROW) '12-'15,unknown
+#2017-04-19,EVORA S Manual (ROW) '12-'15,R132E0096
+#2012-00-00,EXIGE S Manual (ROW) '12-'16,unknown
+#2017-04-19,EXIGE S Manual (ROW) '12-'16,N138E0009
+2017-04-19,EVORA 400 Manual (ROW) '16,G132E0228
+2017-04-19,EVORA NA Manual (ROW) '11,A132E0090
+2017-04-19,EVORA NA Manual (ROW) '12-'15,P132E0092
+2017-04-19,EVORA S Manual (ROW) '11,G132E0075
+2017-04-19,EVORA S Manual (ROW) '12-'15,R132E0096
+2017-04-19,EXIGE S Manual (ROW) '12-'16,N138E0009
