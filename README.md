@@ -1,5 +1,6 @@
 # lotus-vsic-check
-Experimantal script to scrape http://vsic.lotuscars.com pages for ECU calibration file updates for 2GR-FE engined cars.
+Script to scrape http://vsic.lotuscars.com for ECU calibration (CRP) files for customisable list of cars.
+We store historical CRP versions in the script, for our own entertainment.
 
 ```
 $ ./lotus_vsic_check
