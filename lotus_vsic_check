@@ -11,6 +11,7 @@ my $vsic_base = 'http://vsic.lotuscars.com/downloads/software';
 # http://en.wikipedia.org/wiki/ISO_8601 ftw.
 # Allows us to compare dates lexicographically (ie, using cmp, lt, gt).
 my $today     = strftime "%Y-%m-%d", localtime;
+my $sleep     = 0.3;
 my $debug     = 0;
 local $|      = 1; # Flush to STDOUT as it happens, don't buffer
 
@@ -84,7 +85,7 @@ sub append_new_values {
 }
 
 # Read the CRP versions we've saved in the __DATA__ segment into %models
-print " [+] Reading historical CRP data\n"; sleep(0.7);
+print " [+] Reading historical CRP data\n"; sleep($sleep);
 my $offset = tell DATA; # save the position
 seek DATA, $offset, 0;  # position filehandle just past __DATA__
 while (my $line = <DATA>) {
@@ -94,12 +95,12 @@ while (my $line = <DATA>) {
     push @{$models{$model}{'DATECRP'}}, [$date,$crp];
 }
 # Sort DATECRP array. Using arrow notation for first element of array reference.
-print " [+] Sorting chronologically\n"; sleep(0.7);
+print " [+] Sorting chronologically\n"; sleep($sleep);
 foreach my $model (sort keys %models) {
     @{$models{$model}{'DATECRP'}} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}};
 }
 
-print " [+] Checking for new CRP versions\n"; sleep(0.7);
+print " [+] Checking for new CRP versions\n"; sleep($sleep);
 foreach my $model (sort keys %models) {
     print "$model :\n";
     my $array_pos=0;
