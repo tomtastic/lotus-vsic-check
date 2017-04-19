@@ -3,78 +3,61 @@
 use strict;
 use warnings;
 use POSIX qw(strftime);
+use Time::HiRes qw(sleep); # For floaty seconds
 use LWP::UserAgent;
+use Data::Dumper;
 
-my $vsic_base = 'http://vsic.lotuscars.com/downloads/software?';
+my $vsic_base = 'http://vsic.lotuscars.com/downloads/software';
 # http://en.wikipedia.org/wiki/ISO_8601 ftw.
 # Allows us to compare dates lexicographically (ie, using lt, gt).
 my $today     = strftime "%Y-%m-%d", localtime;
+my $debug     = 0;
+local $|      = 1; # Flush to STDOUT as it happens, don't buffer
 
+
+# See bottom of script for definitions
 my %models = (
     "EVORA S (ROW) '12-'15" => {
-        'URL' => 'field_models_tr_tid=74&field_model_years_tr_tid=99&field_gearbox_tr_tid=100&field_engine_type_tr_tid=7&field_chassis_spec_tr_tid=65',
+        'URL' => '?field_models_tr_tid=74'.        # Evora
+                 '&field_model_years_tr_tid=99'.   # 2015
+                 '&field_gearbox_tr_tid=100'.      # Manual
+                 '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
+                 '&field_chassis_spec_tr_tid=65',  # RHD Other
         'DESC' => undef,
         'DATECRP' => undef,
     },
     "EVORA NA (ROW) '12-'15" => {
-        'URL' => 'field_models_tr_tid=74&field_model_years_tr_tid=96&field_gearbox_tr_tid=100&field_engine_type_tr_tid=6&field_chassis_spec_tr_tid=65',
+        'URL' => '?field_models_tr_tid=74'.        # Evora
+                 '&field_model_years_tr_tid=96'.   # 2012
+                 '&field_gearbox_tr_tid=100'.      # Manual
+                 '&field_engine_type_tr_tid=6'.    # 2GR-FE
+                 '&field_chassis_spec_tr_tid=65',  # RHD Other
         'DESC' => undef,
         'DATECRP' => undef,
     },
     "EXIGE S (ROW) '12-'16" => {
-        'URL' => 'field_models_tr_tid=75&field_model_years_tr_tid=96&field_gearbox_tr_tid=100&field_engine_type_tr_tid=7&field_chassis_spec_tr_tid=65',
+        'URL' => '?field_models_tr_tid=75'.        # Exige
+                 '&field_model_years_tr_tid=96'.   # 2012
+                 '&field_gearbox_tr_tid=100'.      # Manual
+                 '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
+                 '&field_chassis_spec_tr_tid=65',  # RHD Other
         'DESC' => undef,
         'DATECRP' => undef,
     }
 );
 
-# Read the CRP versions we've saved in the __DATA__ segment into %models
-my $offset = tell DATA; # save the position
-seek DATA, $offset, 0;  # position filehandle just past __DATA__
-while (my $line = <DATA>) {
-    chomp $line;
-    my ($date,$model,$crp) = split(/,/,$line);
-    # Build an array of CRP {date,version} tuples
-    push @{$models{$model}{'DATECRP'}}, [$date,$crp];
-}
-# Sort DATECRP array. Using arrow notation for first element of array reference.
-foreach my $model (sort keys %models) {
-    @{$models{$model}{'DATECRP'}} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}};
-}
-
-foreach my $model (sort keys %models) {
-    print "$model : \n";
-    foreach my $tuples (@{$models{$model}{'DATECRP'}}) {
-        printf("\t- %-10s : %s\n",@$tuples[0],@$tuples[1]); # date : crp
-    }
-}
-
-#foreach (keys %models) {
-#    # last if ($date > $models{$_}{'LASTDATE'})
-#    &show;
-#}
-# else try to parse VSIC for updated values
-#&vsic_check;
-# possibly (with a -w argument)? append the new VSIC values to the DATA segment
-#&append_new_values;
-
-sub append_new_values {
-    seek DATA, 0, 2; # go to the end of the source file
-    my $offset = tell(DATA); # remember where that is
-    open my $self, '>>', $0 or die $!; # of course, you could use DATA instead of $self here
-    seek $self, $offset, 0; # go to the previously recorded position
-    foreach (sort keys %models) {
-        print {$self} "$today,$_,$models{$_}{'CRP'},newdata!!\n";
-    }
-}
-
+# Subroutine for scraping the Lotus VSIC pages
 sub vsic_check {
+    # TODO - make this a bonafide subroutine...
+    # Take the 'models' hash reference
+    # Take the URL to query
+    # Return the 'models' hash reference or error.
     my $lwp = LWP::UserAgent->new;
     foreach (sort keys %models) {
         my $response = $lwp->get($vsic_base.$models{$_}{'URL'});
         if ($response->is_success) {
             my $response_body = $response->decoded_content;
-            # '12-'15 Evora S & S-IPS Supercharged Models Engine Management Program .CRP File R132E0096
+            # "'12-'15 Evora S & S-IPS Supercharged Models Engine Management Program .CRP File R132E0096"
             $response_body =~ m/(\&#039;.*([[:upper:]][[:digit:]]{3}[[:upper:]][[:digit:]]{4}))/;
             $models{$_}{'DESC'} = $1;
             $models{$_}{'CRP'} = $2;
@@ -91,10 +74,138 @@ sub vsic_check {
     }
 }
 
+# Possibly (with a -w argument)? append new VSIC values to the DATA segment
+sub append_new_values {
+    seek DATA, 0, 2; # go to the end of the source file
+    my $offset = tell(DATA); # remember where that is
+    open my $self, '>>', $0 or die $!; # of course, you could use DATA instead of $self here
+    seek $self, $offset, 0; # go to the previously recorded position
+    foreach (sort keys %models) {
+        print {$self} "$today,$_,$models{$_}{'CRP'},newdata!!\n";
+    }
+}
+
+# Read the CRP versions we've saved in the __DATA__ segment into %models
+print " [+] Reading historical CRP data\n"; sleep(0.7);
+my $offset = tell DATA; # save the position
+seek DATA, $offset, 0;  # position filehandle just past __DATA__
+while (my $line = <DATA>) {
+    chomp $line;
+    my ($date,$model,$crp) = split(/,/,$line);
+    # Build an array of CRP {date,version} tuples
+    push @{$models{$model}{'DATECRP'}}, [$date,$crp];
+}
+# Sort DATECRP array. Using arrow notation for first element of array reference.
+print " [+] Sorting chronologically\n"; sleep(0.7);
+foreach my $model (sort keys %models) {
+    @{$models{$model}{'DATECRP'}} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}};
+}
+
+print " [+] Checking for new CRP versions\n"; sleep(0.7);
+foreach my $model (sort keys %models) {
+    print "$model :\n";
+    my $array_pos=0;
+    print "DEBUG: $#{$models{$model}{'DATECRP'}} items in DATECRP array\n" if ($debug);
+    foreach my $tuples (@{$models{$model}{'DATECRP'}}) {
+        printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
+        if ($array_pos == $#{$models{$model}{'DATECRP'}}) {
+            # For the last (most recent) date tuple, compare against VSIC
+            print " <-- (last known)\n";
+        } else {
+            print "\n";
+        }
+        $array_pos++;
+    }
+}
+
+# field_models_tr_tid :
+#    "70" 2-Eleven
+#    "71" Elise
+#    "72" Elise EU
+#    "73" Elise RoW
+#    "74" Evora
+#    "75" Exige
+#    "76" Exige EU
+#    "77" Exige RoW
+#    "104" Exige Coupe EU
+#    "105" Exige Coupe RoW
+#    "106" Exige Roadster EU
+#    "107" Exige Roadster RoW
+# field_model_years_tr_tid :
+#    "88" 2004
+#    "89" 2005
+#    "90" 2006
+#    "91" 2007
+#    "92" 2008
+#    "93" 2009
+#    "94" 2010
+#    "95" 2011
+#    "96" 2012
+#    "97" 2013
+#    "98" 2014
+#    "99" 2015
+#    "108" 2016
+# field_gearbox_tr_tid :
+#    "100" Manual
+#    "101" Automatic (IPS)
+# field_engine_type_tr_tid :
+#    "3" 1ZR 136
+#    "4" 1ZZ
+#    "5" 1ZZ 140
+#    "6" 2GR-FE
+#    "7" 2GR-FE sc (257.5kW)
+#    "8" 2ZR sc 220 c/c
+#    "9" 2ZZ 190 evap
+#    "10" 2ZZ
+#    "11" 2ZZ no evap
+#    "12" 2ZZ sc 190 no evap
+#    "13" 2ZZ sc 220
+#    "14" 2ZZ sc 220 c/c
+#    "15" 2ZZ sc 220 non c/c
+#    "16" 2ZZ sc 240
+#    "17" 2ZZ sc 240 c/c
+#    "18" 2ZZ sc 255
+#    "19" 2ZZ sc 255 no evap
+#    "20" 2ZZ sc 260
+#    "21" 2ZZ sc 260 c/c
+#    "22" 2ZZ sc 260 c/c no evap
+#    "23" 2ZZ sc 260 no evap
+#    "24" 2ZZ sc 270
+#    "25" Electric
+#    "26" Motorsport
+#    "113" 1ZR-FAE
+#    "114" 2ZR-FE sc ic
+#    "120" 2GR-FE sc (298kW)
+# field_chassis_spec_tr_tid :
+#    "50" Centre Drive Track
+#    "51" China
+#    "52" Gulf States
+#    "53" LDD AC
+#    "54" LHD Canada
+#    "55" LHD Canada AC
+#    "56" LHD Fed. AC
+#    "57" LHD Other
+#    "58" LHD SVA
+#    "59" LHD SVA AC
+#    "60" LHD Track
+#    "61" LHD USA
+#    "62" MSport LHD
+#    "63" MSport RHD
+#    "64" RHD AC
+#    "65" RHD Other
+#    "66" RHD SVA
+#    "67" RHD Track
+#    "68" RHD U.K. SVA
+#    "69" RHD U.K. SVA AC
+#    "115" Prototype
+#    "116" LHD Federal
+#    "117" GCC
+#    "118" RHD SVA AC
+
 __DATA__
-2017-03-01,EVORA NA (ROW) '12-'15,EVNA1
-2017-03-01,EVORA S (ROW) '12-'15,EVS1
-2017-03-01,EXIGE S (ROW) '12-'16,EX1
-2017-04-18,EVORA NA (ROW) '12-'15,EVNA2
-2017-04-18,EVORA S (ROW) '12-'15,EVS2
-2017-04-18,EXIGE S (ROW) '12-'16,EX2
+2017-03-01,EVORA S (ROW) '12-'15,EVS_exampleCRP1
+2017-04-18,EXIGE S (ROW) '12-'16,EX_exampleCRP2
+2017-04-18,EVORA NA (ROW) '12-'15,EVNA_exampleCRP2
+2017-03-01,EVORA NA (ROW) '12-'15,EVNA_exampleCRP1
+2017-04-18,EVORA S (ROW) '12-'15,R132E0096
+2017-03-01,EXIGE S (ROW) '12-'16,EX_exampleCRP1
