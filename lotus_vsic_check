@@ -41,6 +41,13 @@ my %models = (
                  '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
     },
+    "EVORA NA (ROW) '11" => {
+        'URL' => '?field_models_tr_tid=74'.        # Evora
+                 '&field_model_years_tr_tid=95'.   # 2012
+                 '&field_gearbox_tr_tid=100'.      # Manual
+                 '&field_engine_type_tr_tid=6'.    # 2GR-FE
+                 '&field_chassis_spec_tr_tid=65',  # RHD Other
+    },
     "EVORA NA (ROW) '12-'15" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
                  '&field_model_years_tr_tid=96'.   # 2012
@@ -248,3 +255,4 @@ __DATA__
 2017-04-18,EVORA NA (ROW) '12-'15,P132E0092
 2017-04-18,EXIGE S (ROW) '12-'16,N138E0009
 2017-04-19,EVORA S (ROW) '11,G132E0075
+2017-04-19,EVORA NA (ROW) '11,A132E0090
