@@ -33,8 +33,13 @@ my %models = (
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
-        'DESC' => undef,
-        'DATECRP' => undef,
+    },
+    "EVORA S (ROW) '11" => {
+        'URL' => '?field_models_tr_tid=74'.        # Evora
+                 '&field_model_years_tr_tid=95'.   # 2011 (LE year)
+                 '&field_gearbox_tr_tid=100'.      # Manual
+                 '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
+                 '&field_chassis_spec_tr_tid=65',  # RHD Other
     },
     "EVORA NA (ROW) '12-'15" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
@@ -42,8 +47,6 @@ my %models = (
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=6'.    # 2GR-FE
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
-        'DESC' => undef,
-        'DATECRP' => undef,
     },
     "EXIGE S (ROW) '12-'16" => {
         'URL' => '?field_models_tr_tid=75'.        # Exige
@@ -51,8 +54,6 @@ my %models = (
                  '&field_gearbox_tr_tid=100'.      # Manual
                  '&field_engine_type_tr_tid=7'.    # 2GR-FE sc (257.5kW)
                  '&field_chassis_spec_tr_tid=65',  # RHD Other
-        'DESC' => undef,
-        'DATECRP' => undef,
     }
 );
 
@@ -72,6 +73,7 @@ sub vsic_check {
     my %hash = %{$_[0]};
     my $model = $_[1];
     my $lwp = LWP::UserAgent->new;
+    sleep($sleep); # Small sleep here to be polite to VSIC webserver.
     my $response = $lwp->get($vsic_base.$hash{$model}{'URL'});
     if ($response->is_success) {
         my $response_body = $response->decoded_content;
@@ -87,61 +89,65 @@ sub vsic_check {
     $hash{$model}{'DESC'} =~ s/\&amp;/&/g;
     $hash{$model}{'DESC'} =~ s/\&#039;/\'/g;
     $hash{$model}{'DESC'} =~ s/\ +Engine.*$//g;
+    print "DEBUG: $hash{$model}{'CRP'}\nDEBUG: $hash{$model}{'DESC'}\n" if ($debug);
     return ($hash{$model}{'CRP'},$hash{$model}{'DESC'});
 }
 
 sub add_to_history {
+    # I KNOW! horrible and dangerous right!
     my $model=shift;
     my $crp=shift;
-    #seek DATA, 0, 2; # go to the end of the source file
-    #my $offset = tell(DATA); # remember where that is
-    open my $self, '>>', $0 or die $!; # of course, you could use DATA instead of $self here
-    #seek $self, $offset, 0; # go to the previously recorded position
+    open my $self, '>>', $0 or die $!;
     print {$self} "$today,$model,$crp\n";
     close $self;
 }
 
-print "\e[$c{red}m [+] Loading CRP version data...\e[m\n"; sleep($sleep);
-my $offset = tell DATA; # save the position
-seek DATA, $offset, 0;  # position filehandle just past __DATA__
+print "\e[$c{red}m [+] Loading CRP version data...\e[m\n";
 while (my $line = <DATA>) {
     chomp $line;
     my ($date,$model,$crp) = split(/,/,$line);
     push @{$models{$model}{'DATECRP'}}, [$date,$crp];
 }
 
-print "\e[$c{red}m [+] Sorting...\e[m\n"; sleep($sleep);
+print "\e[$c{red}m [+] Sorting...\e[m\n";
 foreach my $model (sort keys %models) {
     @{$models{$model}{'DATECRP'}} = sort { $a->[0] cmp $b->[0] } @{$models{$model}{'DATECRP'}};
 }
 
-print "\e[$c{red}m [+] Checking Lotus VSIC for updates...\e[m\n"; sleep($sleep);
+print "\e[$c{red}m [+] Checking Lotus VSIC for updates...\e[m\n";
 foreach my $model (sort keys %models) {
     print "\e[$c{green}m$model :\e[m\n";
     my $array_pos=0;
-    foreach my $datecrp (@{$models{$model}{'DATECRP'}}) {
-        my $date = @$datecrp[0];
-        my $crp  = @$datecrp[1];
-        if ($array_pos == $#{$models{$model}{'DATECRP'}}) {
-            if ($today gt $date) {
-                sleep($sleep);
-                my ($crp_new,$crp_new_desc) = vsic_check(\%models,$model);
-                if ($crp eq $crp_new) {
-                    printf("\t%-10s, %-20s <--Unchanged\n",$date,$crp);
+    if (@{$models{$model}{'DATECRP'}}) {
+        foreach my $datecrp (@{$models{$model}{'DATECRP'}}) {
+            my $date = @$datecrp[0];
+            my $crp  = @$datecrp[1];
+            if ($array_pos == $#{$models{$model}{'DATECRP'}}) {
+                if ($today gt $date) {
+                    my ($crp_new,$crp_new_desc) = vsic_check(\%models,$model);
+                    if ($crp eq $crp_new) {
+                        printf("\t%-10s, %-20s <--Unchanged\n",$date,$crp);
+                    } else {
+                        printf("\t%-10s, %-20s\n",$date,$crp);
+                        printf("\t%-10s, %-20s <--\e[%dmNew CRP version!\e[m\n",$today,$crp_new,$c{yellow});
+                        printf("\t%-10s  %-20s    \e[%dm%s\e[m\n",'','',$c{yellow},$crp_new_desc);
+                        $new_flag=1;
+                        add_to_history($model,$crp_new) if ($update);
+                    }
                 } else {
-                    printf("\t%-10s, %-20s\n",$date,$crp);
-                    printf("\t%-10s, %-20s <--\e[%dmNew CRP version!\e[m\n",$today,$crp_new,$c{yellow});
-                    printf("\t%-10s  %-20s    \e[%dm%s\e[m\n",'','',$c{yellow},$crp_new_desc);
-                    $new_flag=1;
-                    add_to_history($model,$crp_new) if ($update);
+                    printf("\t%-10s, %-20s <--Current\n",$date,$crp);
                 }
             } else {
-                printf("\t%-10s, %-20s <--Current\n",$date,$crp);
+                printf("\t%-10s, %-20s\n",$date,$crp);
             }
-        } else {
-            printf("\t%-10s, %-20s\n",$date,$crp);
+            $array_pos++;
         }
-        $array_pos++;
+    } else {
+        my ($crp_new,$crp_new_desc) = vsic_check(\%models,$model);
+        printf("\t%-10s, %-20s <--\e[%dmNew CRP version!\e[m\n",$today,$crp_new,$c{yellow});
+        printf("\t%-10s  %-20s    \e[%dm%s\e[m\n",'','',$c{yellow},$crp_new_desc);
+        $new_flag=1;
+        add_to_history($model,$crp_new) if ($update);
     }
 }
 if ($update and not $new_flag) {
@@ -238,11 +244,7 @@ if ($update and not $new_flag) {
 #    "118" RHD SVA AC
 
 __DATA__
-2017-03-01,EVORA S (ROW) '12-'15,TESTTESTTEST
-2017-04-18,EXIGE S (ROW) '12-'16,TESTTESTTEST
-2017-04-18,EVORA NA (ROW) '12-'15,TESTTESTTEST
-2017-03-01,EVORA NA (ROW) '12-'15,TESTTESTTEST
 2017-04-18,EVORA S (ROW) '12-'15,R132E0096
-2017-03-01,EXIGE S (ROW) '12-'16,TESTTESTTEST
-2017-04-19,EVORA NA (ROW) '12-'15,P132E0092
-2017-04-19,EXIGE S (ROW) '12-'16,N138E0009
+2017-04-18,EVORA NA (ROW) '12-'15,P132E0092
+2017-04-18,EXIGE S (ROW) '12-'16,N138E0009
+2017-04-19,EVORA S (ROW) '11,G132E0075
