@@ -79,8 +79,8 @@ sub append_new_values {
     my $offset = tell(DATA); # remember where that is
     open my $self, '>>', $0 or die $!; # of course, you could use DATA instead of $self here
     seek $self, $offset, 0; # go to the previously recorded position
-    foreach (sort keys %models) {
-        print {$self} "$today,$_,$models{$_}{'CRP'},newdata!!\n";
+    foreach my $model (sort keys %models) {
+        print {$self} "$today,$model,$models{$model}{'CRP'},newdata!!\n";
     }
 }
 
@@ -104,23 +104,26 @@ print " [+] Checking for new CRP versions\n"; sleep($sleep);
 foreach my $model (sort keys %models) {
     print "$model :\n";
     my $array_pos=0;
-    foreach my $tuples (@{$models{$model}{'DATECRP'}}) {
+    foreach my $datecrp (@{$models{$model}{'DATECRP'}}) {
+        my $date = @$datecrp[0];
+        my $crp  = @$datecrp[1];
         if ($array_pos == $#{$models{$model}{'DATECRP'}}) {
-            # For the last (most recent) date tuple, compare against VSIC
-            # TODO - only if tuple[0] isn't today, then dont bother vsic.
-            my $crp = vsic_check(\%models,$model);
-            if ($crp eq @$tuples[1]) {
-                printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
-                print " <-- (unchanged)\n";
+            # We're the last {date,crp} to print, check VSIC for an update
+            # unless $date is today, then dont bother VSIC, print what we have
+            if ($today gt $date) {
+                my $crp_new = vsic_check(\%models,$model);
+                if ($crp eq $crp_new) {
+                    printf("\t%-10s, %-20s <--( unchanged )\n",$date,$crp);
+                } else {
+                    printf("\t%-10s, %-20s\n",$date,$crp);
+                    printf("\t%-10s, %-20s <--( new )\n",$today,$crp_new);
+                }
             } else {
-                printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
-                print "\n";
-                printf("\t%-10s, %-20s",$today,$crp); # date : crp
-                print " <-- (new!)\n";
+                printf("\t%-10s, %-20s <--( unchanged )\n",$date,$crp);
             }
         } else {
-            printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
-            print "\n";
+            # Otherwise, just print
+            printf("\t%-10s, %-20s\n",$date,$crp);
         }
         $array_pos++;
     }
