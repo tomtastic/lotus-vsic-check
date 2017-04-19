@@ -9,13 +9,12 @@ use Data::Dumper;
 
 my $vsic_base = 'http://vsic.lotuscars.com/downloads/software';
 # http://en.wikipedia.org/wiki/ISO_8601 ftw.
-# Allows us to compare dates lexicographically (ie, using lt, gt).
+# Allows us to compare dates lexicographically (ie, using cmp, lt, gt).
 my $today     = strftime "%Y-%m-%d", localtime;
 my $debug     = 0;
 local $|      = 1; # Flush to STDOUT as it happens, don't buffer
 
-
-# See bottom of script for definitions
+# See bottom of script for field definitions
 my %models = (
     "EVORA S (ROW) '12-'15" => {
         'URL' => '?field_models_tr_tid=74'.        # Evora
@@ -48,30 +47,29 @@ my %models = (
 
 # Subroutine for scraping the Lotus VSIC pages
 sub vsic_check {
-    # TODO - make this a bonafide subroutine...
-    # Take the 'models' hash reference
-    # Take the URL to query
-    # Return the 'models' hash reference or error.
+    my %hash = %{$_[0]};
+    my $model = $_[1];
+    # Return the 'hash' hash reference or error.
     my $lwp = LWP::UserAgent->new;
-    foreach (sort keys %models) {
-        my $response = $lwp->get($vsic_base.$models{$_}{'URL'});
-        if ($response->is_success) {
-            my $response_body = $response->decoded_content;
-            # "'12-'15 Evora S & S-IPS Supercharged Models Engine Management Program .CRP File R132E0096"
-            $response_body =~ m/(\&#039;.*([[:upper:]][[:digit:]]{3}[[:upper:]][[:digit:]]{4}))/;
-            $models{$_}{'DESC'} = $1;
-            $models{$_}{'CRP'} = $2;
-        } else {
-            die "Error getting the VSIC page : $vsic_base.$models{$_}{'URL'}\n";
-        }
-        die "Couldn't find the CRP field : $vsic_base.$models{$_}{'URL'}\n" unless defined($models{$_}{'CRP'});
-        # Tidy up the HTML quoted characters...
-        $models{$_}{'DESC'} =~ s/\&amp;/&/g;
-        $models{$_}{'DESC'} =~ s/\&#039;/\'/g;
-        $models{$_}{'DESC'} =~ s/\ +Engine.*$//g;
-        $models{$_}{'DESC'} =~ s/^/"/g;
-        $models{$_}{'DESC'} =~ s/$/"/g;
+    my $response = $lwp->get($vsic_base.$hash{$model}{'URL'});
+    if ($response->is_success) {
+        my $response_body = $response->decoded_content;
+        # "&#039;12-&#039;15 Evora S & S-IPS Supercharged hash Engine Management Program .CRP File R132E0096"
+        $response_body =~ m/(\&#039;.*([[:upper:]][[:digit:]]{3}[[:upper:]][[:digit:]]{4}))/;
+        $hash{$model}{'DESC'} = $1;
+        $hash{$model}{'CRP'} = $2;
+        print "DEBUG: $hash{$model}{'DESC'}\n" if ($debug);
+    } else {
+        die "Error getting the VSIC page : $vsic_base.$hash{$model}{'URL'}\n";
     }
+    die "Couldn't find the CRP field : $vsic_base.$hash{$model}{'URL'}\n" unless defined($hash{$model}{'CRP'});
+    # Tidy up the HTML quoted characters...
+    $hash{$model}{'DESC'} =~ s/\&amp;/&/g;
+    $hash{$model}{'DESC'} =~ s/\&#039;/\'/g;
+    $hash{$model}{'DESC'} =~ s/\ +Engine.*$//g;
+    $hash{$model}{'DESC'} =~ s/^/"/g;
+    $hash{$model}{'DESC'} =~ s/$/"/g;
+    return $hash{$model}{'CRP'};
 }
 
 # Possibly (with a -w argument)? append new VSIC values to the DATA segment
@@ -105,13 +103,22 @@ print " [+] Checking for new CRP versions\n"; sleep(0.7);
 foreach my $model (sort keys %models) {
     print "$model :\n";
     my $array_pos=0;
-    print "DEBUG: $#{$models{$model}{'DATECRP'}} items in DATECRP array\n" if ($debug);
     foreach my $tuples (@{$models{$model}{'DATECRP'}}) {
-        printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
         if ($array_pos == $#{$models{$model}{'DATECRP'}}) {
             # For the last (most recent) date tuple, compare against VSIC
-            print " <-- (last known)\n";
+            # TODO - only if tuple[0] isn't today, then dont bother vsic.
+            my $crp = vsic_check(\%models,$model);
+            if ($crp eq @$tuples[1]) {
+                printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
+                print " <-- (unchanged)\n";
+            } else {
+                printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
+                print "\n";
+                printf("\t%-10s, %-20s",$today,$crp); # date : crp
+                print " <-- (new!)\n";
+            }
         } else {
+            printf("\t%-10s, %-20s",@$tuples[0],@$tuples[1]); # date : crp
             print "\n";
         }
         $array_pos++;
